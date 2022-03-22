@@ -1,0 +1,52 @@
+#!/bin/bash
+
+#Example of different stdout and stderr logging from script output
+#example-script  > >(log 4) 2> >(log 0)
+
+# set default verbose level to info if not defined
+: ${__VERBOSE:=6}
+export __VERBOSE
+# __OUTPUT = log to filename, if empty stderr is used
+# __FACILITY = log to syslog if variable is defined, see https://en.wikipedia.org/wiki/Syslog#Facility
+#>/dev/null added for old bash
+# TODO - while read -r line fails - problem with set -e
+
+declare -A LOG_LEVELS 2>/dev/null
+declare -A LOG_LEVEL_STRING 2>/dev/null
+LOG_LEVEL_STRING=([emerg]=0 [emergency]=0 [alert]=1 [crit]=2 [critical]=2 [err]=3 [error]=3 [warning]=4 [warn]=4 [notice]=5 [note]=5 [info]=6 [inf]=6 [debug]=7 [debug2]=8 [debug3]=9)
+[ -z "${USER:=}" ] &&  export USER=$(/usr/bin/whoami)
+# https://en.wikipedia.org/wiki/Syslog#Severity_level
+LOG_LEVELS=([0]="emerg" [1]="alert" [2]="crit" [3]="err" [4]="warning" [5]="notice" [6]="info" [7]="debug" [8]="debug2" [9]="debug3")
+function log () {
+  local LEVEL=${1}
+  shift
+  if ! [ "$LEVEL" -eq "$LEVEL" ] 2>/dev/null; then
+  #$LEVEL is not number, try to resolve
+  LEVEL=${LOG_LEVEL_STRING[$LEVEL]}
+  fi
+  if ! [ "$__VERBOSE" -eq "$__VERBOSE" ] 2>/dev/null ; then
+  #$__VERBOSE is not number, try to resolve
+  __VERBOSE=${LOG_LEVEL_STRING[$__VERBOSE]}
+  fi
+  if [ ${__VERBOSE} -ge ${LEVEL} ]; then
+      ( 
+      set +e
+      while read -r line; do
+        if [ -n "${line:=}" ]; then
+    # Log to stderr if __OUTPUT is empty
+          if [ -z "${__OUTPUT:=}" ]; then
+        echo "[${LOG_LEVELS[$LEVEL]}]" "$line" >&2
+      else
+        echo "[${LOG_LEVELS[$LEVEL]}]" "$line" >>${__OUTPUT}
+    fi
+    # Send output to syslog also (debug2,3 is trimmed to debug only)
+          [ -n "${__FACILITY:=}" ] && logger -t "($USER) $0" -p $__FACILITY.${LOG_LEVELS[$LEVEL]%[23]} "[${LOG_LEVELS[$LEVEL]}] $line"
+          #[ -n "{$__FACILITY:=}" ] && logger --id=$$ -t "($USER) $0" -p $__FACILITY.${LOG_LEVELS[$LEVEL]%[23]} "[${LOG_LEVELS[$LEVEL]}] $line"
+  fi
+      done <<< "${@:-$(cat /dev/stdin)}"
+      :
+      )
+  fi
+}
+export -f log
+
