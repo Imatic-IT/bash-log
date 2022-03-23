@@ -30,10 +30,14 @@ You can pipe messages to log
 ```
 echo "Info logging message" | log info
 ```
-
 You can output stdout and stderr of your command with different log level with
 ```
 example-command  > >(log 4) 2> >(log 0)
+
+If pipe output is important or you want to log in the middle of the pipe you can use
+
+example-command | tee >(log debug) | other-command
+
 ```
 
 ### Syslog facility usage
